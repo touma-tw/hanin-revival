@@ -133,3 +133,15 @@
 - 選字窗滑鼠點選;漢音工具箱(Tools95)、使用者造詞;ADR/NAME 與專業詞庫檔名對應未驗證。
 - 宿主卡死(非崩潰)情境只靠設計推論:前端 1.5s 逾時 + 宿主 4s 看門狗,未實際模擬。
 - 焦點切換時有組字中的文字:以 COMPLETE 送出,未用多視窗實測。
+
+### Phase 3 — 散佈用安裝程式與開源(2026-11-06)
+- `installer/HaninRevival.nsi`(NSIS 3,Unicode,需 UTF-8 BOM):檢查同目錄 `Hanin502.exe` → SHA-256
+  (`C8EE45C4…5814`)→ `extract-hanin.ps1` 依固定位移以 .NET DeflateStream 解出 23 檔並逐檔驗證 SHA-256
+  → regsvr32(Sysnative/SysWOW64)→ `hanin-setup.ps1`(使用者鍵盤清單、清除舊版自簽憑證與 HKCU Run)
+  → HKLM Run、全體使用者開始功能表捷徑、解除安裝項目。`/DTESTNOADMIN` 產生只跑檢查流程的測試版。
+- 安裝檔只含本專案程式;語言列/設定檔的原版圖示改在執行期由使用者自己的 `payload\HANIN95.IME`(圖示索引 1)取得,
+  我們自己的備用圖示為 `tip/hanin_fallback.ico`。
+- 散佈版**不簽章**(本機自簽對 EAC 無效);DllUnregisterServer 以 `ITfInputProcessorProfiles::Unregister` 清除整個 TIP 機碼。
+- 建置:`installer\build-release.ps1 -Version x.y.z` → `release\HaninRevival-Setup-x.y.z.exe`。
+- 測試:缺檔、SHA 不符(竄改 1 bit)、正常;容器外靜默安裝 → 解除安裝(x64/x86 註冊全清)→ 重裝,皆通過。
+- git:本機 repo 已初始化並 commit,`.gitignore` 排除所有 Panasonic 檔案、反組譯、原版圖示、建置產物;尚未推送。
