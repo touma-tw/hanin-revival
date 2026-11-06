@@ -68,15 +68,6 @@
   `0` 不是合法值(工具箱顯示無選取),但引擎會退回成倚天行為 —— 早先手動設 0 是誤判,已由工具箱改成 3。
 - 工具箱改設定會即時 `SendMessage(0x962, 0x323/0x324, 值)` 給引擎的 `Hanin95` UI 視窗,不必重啟。
 
-### ⚠ 檔案系統虛擬化陷阱(2026-11-06 發現並修正)
-- 從 Claude 桌面版(MSIX)內啟動的行程,寫入 `%LOCALAPPDATA%` 會被重導到
-  `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\...`,而且**這些行程沒有封裝身分**
-  (`GetCurrentPackageFullName` 回 15700),只能用行為偵測。Explorer 啟動的程式看不到這份資料。
-- 症狀:使用者從開始功能表開工具箱 → 找不到資料夾而失敗;重開機後引擎會用預設值(標準鍵盤)重建資料。
-- 修正(`common/outside_pkg.h`):宿主與工具箱啟動時寫探測檔偵測重導,若被隔離就以 Explorer 為父行程
-  (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`)重啟自己;宿主第一次在真實位置建立資料時,先從虛擬副本搬回設定與使用者詞庫。
-- **開發/測試時要看真實資料**:用 `explorer.exe probe.cmd` 讓腳本在外部執行,輸出寫到 F:\(不受虛擬化影響)。
-
 ### 系統 UTF-8(ACP 65001)相容(2026-11-06)
 - 使用者開了「Beta:使用 Unicode UTF-8 提供全球語言支援」→ 工具箱執行期 ANSI 文字亂碼(資源檔文字正常)。
 - `common/legacy_cp.manifest`(`activeCodePage=Legacy` + gdiScaling)嵌入 hanin_host.exe 與 hanin_tools.exe
@@ -99,21 +90,20 @@
   (僅程式碼簽署 EKU、私鑰不可匯出、20 年),公開部分加入 LocalMachine\Root 與 TrustedPublisher,
   簽 HaninTip64/32.dll、hanin_host.exe、hanin_tools.exe。uninstall.ps1 會把憑證從三個存放區移除。
 - 容器外驗證:四檔 `Valid`。**EAC 是否接受本機自簽根憑證尚待使用者在 VRChat 實測**;不行就要改用正式憑證。
-- 開機自動啟動改寫 HKLM Run(HKCU 寫入會被 Claude 容器虛擬化,外面看不到)。
+- 開機自動啟動改寫 HKLM Run(HKCU 寫入會被容器虛擬化,外面看不到)。
 - VRChat 的「每個應用程式視窗使用不同輸入法」問題屬 VRChat/Unity 行為(微軟輸入法也一樣),輸入法端無解;維持不勾選。
 
 ### EAC 實測結果與語言列(2026-11-06)
-- **EAC 不接受本機自簽**(使用者實測,同樣「不受信任的系統檔」)。新酷音的 chewing_tip.dll 由
+- **EAC 不接受本機自簽**(使用者實測,同樣「不受信任的系統檔」)。可考慮使用
   SignPath Foundation(GlobalSign 簽發,免費給開源專案)簽章 → 正式簽章候選路線;需公開開源 repo,
   且簽章產物不能含 Panasonic 原版檔(安裝時改由使用者的 Hanin502.exe 解出)。待使用者決定。
-- 語言列(最終):三個按鈕,仿新酷音配置 —— 浮動語言列上「中 中文/英文切換」(`GUID_HaninLbiMode`)、
+- 語言列(最終):三個按鈕 —— 浮動語言列上「中 中文/英文切換」(`GUID_HaninLbiMode`)、
   「設定/工具選單」(`GUID_HaninLbiMenu`,BTN_MENU);工作列指示器 `GUID_LBI_INPUTMODE`。已截圖確認浮動語言列顯示。
   使用者第一次回報「沒按鈕、快速鍵沒作用」時根本還沒登出,所有程式載著最舊版 DLL。
 - (舊紀錄)語言列:兩個按鈕。`GUID_LBI_INPUTMODE`「中/英」(工作列輸入指示器用;使用者開了浮動桌面語言列時不顯示),
   自訂 `GUID_HaninLbiMenu`「漢音」選單按鈕(浮動語言列上可見,已截圖確認)。選單:工具箱、文字查詢、中英切換;
   啟動程式走 `HCMD_LAUNCH` 由宿主執行(宿主在容器外、AppContainer App 也可用)。
 - 補 `GUID_TFCAT_TIPCAP_COMLESS`;ActivateEx 改用 `TF_CreateCategoryMgr`(不依賴 COM 初始化)。
-  Windows「覆寫預設輸入法」清單看不到漢音的原因未確認(新酷音多宣告 COMLESS/UIELEMENTENABLED)。
 - 快速鍵「沒作用」實因:使用者所有程式都在 Ctrl 放行版本安裝前啟動,仍載著舊 DLL(已載入 DLL 無法熱替換)。
   **每次重裝後要登出再登入**。宿主讀 HotKey,把快速功能鈕/螢幕鍵盤/說明/橫直排 對應的鍵還給 App。
 - Ctrl+4 重複句庫可用(需先打過句子);Shift+Enter 線上新詞登錄:見下方「線上新詞登錄與自用辭典存檔」。
