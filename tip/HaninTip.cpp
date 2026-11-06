@@ -73,15 +73,18 @@ static int g_debug = -1;
 
 static void ModuleDir(wchar_t *dir);
 
-// Original 漢音 icon: icon group #2 (index 1) of the user's own HANIN95.IME.
+// Original 漢音 icon, exported at install time from icon group #2 of the user's
+// own HANIN95.IME (hanin_host --export-icon). Never point Windows or the app
+// processes at the IME binary itself: Defender flagged rundll32 (the "Text
+// Services" dialog) reading it as Trojan:Win32/PShellDown.SB and quarantined it.
 static bool OriginalIconFile(wchar_t *path)
 {
     wchar_t dir[MAX_PATH];
     ModuleDir(dir);
-    StringCchPrintfW(path, MAX_PATH, L"%s\\payload\\HANIN95.IME", dir);
+    StringCchPrintfW(path, MAX_PATH, L"%s\\payload\\hanin.ico", dir);
     return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
 }
-static const int kOriginalIconIndex = 1;
+static const int kOriginalIconIndex = 0;
 
 static void ModuleDir(wchar_t *dir)
 {
@@ -638,8 +641,8 @@ public:
         int cx = GetSystemMetrics(SM_CXSMICON), cy = GetSystemMetrics(SM_CYSMICON);
         *p = NULL;
         if (m_kind == LB_MENU) {
-            wchar_t ime[MAX_PATH];
-            if (OriginalIconFile(ime)) ExtractIconExW(ime, kOriginalIconIndex, NULL, p, 1);
+            wchar_t ico[MAX_PATH];
+            if (OriginalIconFile(ico)) *p = (HICON)LoadImageW(NULL, ico, IMAGE_ICON, cx, cy, LR_LOADFROMFILE);
         }
         if (!*p)
             *p = (HICON)LoadImageW(g_hInst, MAKEINTRESOURCEW(m_kind == LB_MENU ? IDI_HANIN : m_zh ? IDI_MODE_ZH : IDI_MODE_EN), IMAGE_ICON, cx, cy, 0);

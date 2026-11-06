@@ -139,9 +139,19 @@
   (`C8EE45C4…5814`)→ `extract-hanin.ps1` 依固定位移以 .NET DeflateStream 解出 23 檔並逐檔驗證 SHA-256
   → regsvr32(Sysnative/SysWOW64)→ `hanin-setup.ps1`(使用者鍵盤清單、清除舊版自簽憑證與 HKCU Run)
   → HKLM Run、全體使用者開始功能表捷徑、解除安裝項目。`/DTESTNOADMIN` 產生只跑檢查流程的測試版。
-- 安裝檔只含本專案程式;語言列/設定檔的原版圖示改在執行期由使用者自己的 `payload\HANIN95.IME`(圖示索引 1)取得,
-  我們自己的備用圖示為 `tip/hanin_fallback.ico`。
+- 安裝檔只含本專案程式;原版圖示由安裝程式執行 `hanin_host --export-icon` 從使用者自己的 `HANIN95.IME`
+  (圖示群組索引 1,僅一張 16×16)匯出成 `payload\hanin.ico`;我們自己的備用圖示為 `tip/hanin_fallback.ico`。
 - 散佈版**不簽章**(本機自簽對 EAC 無效);DllUnregisterServer 以 `ITfInputProcessorProfiles::Unregister` 清除整個 TIP 機碼。
 - 建置:`installer\build-release.ps1 -Version x.y.z` → `release\HaninRevival-Setup-x.y.z.exe`。
 - 測試:缺檔、SHA 不符(竄改 1 bit)、正常;容器外靜默安裝 → 解除安裝(x64/x86 註冊全清)→ 重裝,皆通過。
 - git:本機 repo 已初始化並 commit,`.gitignore` 排除所有 Panasonic 檔案、反組譯、原版圖示、建置產物;尚未推送。
+
+### Defender 誤判 HANIN95.IME(2026-11-06,修正於 0.1.1)
+- v0.1.0 把 TSF 設定檔圖示與語言列圖示直接指向 `payload\HANIN95.IME`,所有顯示輸入法圖示的行程都會開啟它。
+  16:23 rundll32(文字服務對話框)讀取時,Defender 即時保護判為 `Trojan:Win32/PShellDown.SB`(嚴重)並隔離。
+- 同一檔案(SHA `074946D0…0569`,與原版一致)以 `MpCmdRun -Scan -ScanType 3` 靜態掃描:no threats;
+  hanin_host 當天以同版病毒碼(1.463.147.0)多次載入也未觸發 → 判斷為情境式誤判。
+- 修正:圖示改用安裝時匯出的 `hanin.ico`,只剩 hanin_host / hanin_tools 會讀 IME。
+  引擎實際載入的是 `%LOCALAPPDATA%\HaninRevival\data\HANIN95.IME` 副本(未被隔離),所以當時打字不受影響。
+- 未能重現:Win11 上 `rundll32 shell32.dll,Control_RunDLL input.dll,,{C07337D3-…}` 不會開出對話框。
+- 待辦:向 Microsoft 回報誤判(使用者自行提交)。

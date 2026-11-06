@@ -1,6 +1,6 @@
 ﻿# Build every component and package the NSIS installer.
-#   powershell -ExecutionPolicy Bypass -File installer\build-release.ps1 [-Version 0.1.0]
-param([string]$Version = '0.1.0')
+#   powershell -ExecutionPolicy Bypass -File installer\build-release.ps1 [-Version 0.1.1]
+param([string]$Version = '0.1.1')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 

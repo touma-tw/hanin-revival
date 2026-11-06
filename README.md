@@ -70,15 +70,19 @@
 
 需要詳細記錄時,可設環境變數 `HANIN_VERBOSE=1`(引擎)與 `HANIN_TIP_DEBUG=1`(前端)。
 
+**Microsoft Defender 把 `HANIN95.IME` 判為木馬(`Trojan:Win32/PShellDown.SB`)並隔離**:這是誤判,
+0.1.0 版會發生。安裝程式解出的檔案都已逐一核對過原版的 SHA-256。請改裝 0.1.1 以上版本:
+重新安裝時會從 `Hanin502.exe` 重新解出引擎,不需要從隔離區還原,也不需要把整個資料夾加入排除清單。
+
 ## 從原始碼建置
 
 需要 Visual Studio 2022(C/C++ 桌面開發,含 x86/x64 工具組)與 NSIS 3。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File installer\build-release.ps1 -Version 0.1.0
+powershell -ExecutionPolicy Bypass -File installer\build-release.ps1 -Version 0.1.1
 ```
 
-產出 `release\HaninRevival-Setup-0.1.0.exe`。
+產出 `release\HaninRevival-Setup-0.1.1.exe`。
 
 | 目錄 | 內容 |
 |---|---|

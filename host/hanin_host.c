@@ -1252,12 +1252,82 @@ static void run_script(const char *s)
 }
 
 /* ======================================================================= */
+/* --export-icon: copy the original 漢音 icon out of the user's HANIN95.IME   */
+/* ======================================================================= */
+/* The TIP's profile icon and language-bar icon used to point straight at
+ * payload\HANIN95.IME, so every process that shows input-method icons
+ * (Settings, the rundll32-hosted "Text Services" dialog, ...) opened the
+ * 1997 IME binary. Microsoft Defender flagged that access pattern as
+ * Trojan:Win32/PShellDown.SB (a false positive: a static scan of the same,
+ * SHA-verified file is clean). The installer now runs this once so that only
+ * hanin_host / hanin_tools ever touch the IME itself. */
+#pragma pack(push, 2)
+typedef struct { BYTE w, h, colors, res; WORD planes, bpp; DWORD bytes; WORD id; } GRPICONENTRY;
+typedef struct { WORD res, type, count; } ICONHDR;
+typedef struct { BYTE w, h, colors, res; WORD planes, bpp; DWORD bytes, offset; } ICONFILEENTRY;
+#pragma pack(pop)
+
+typedef struct { int want, seen; LPWSTR name; WCHAR buf[64]; } GROUPPICK;
+static BOOL CALLBACK pick_group(HMODULE m, LPCWSTR type, LPWSTR name, LONG_PTR p)
+{
+    GROUPPICK *g = (GROUPPICK *)p;
+    (void)m; (void)type;
+    if (g->seen++ != g->want) return TRUE;
+    if (IS_INTRESOURCE(name)) g->name = name;
+    else { lstrcpynW(g->buf, name, 64); g->name = g->buf; }
+    return FALSE;
+}
+
+static int export_icon(const char *ime, const char *out, int index)
+{
+    HMODULE m = LoadLibraryExA(ime, NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    GROUPPICK g = { index, 0, NULL };
+    HRSRC r; const BYTE *grp; const ICONHDR *gh; const GRPICONENTRY *ge;
+    ICONHDR fh; ICONFILEENTRY fe; DWORD off, wr; HANDLE f; int k, rc = 0;
+    if (!m) return 10;
+    EnumResourceNamesW(m, (LPCWSTR)RT_GROUP_ICON, pick_group, (LONG_PTR)&g);
+    if (!g.name) { FreeLibrary(m); return 11; }
+    r = FindResourceW(m, g.name, (LPCWSTR)RT_GROUP_ICON);
+    grp = r ? (const BYTE *)LockResource(LoadResource(m, r)) : NULL;
+    if (!grp) { FreeLibrary(m); return 12; }
+    gh = (const ICONHDR *)grp;
+    ge = (const GRPICONENTRY *)(grp + sizeof(ICONHDR));
+
+    f = CreateFileA(out, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) { FreeLibrary(m); return 13; }
+    fh = *gh;
+    WriteFile(f, &fh, sizeof fh, &wr, NULL);
+    off = sizeof(ICONHDR) + gh->count * sizeof(ICONFILEENTRY);
+    for (k = 0; k < gh->count; k++) {      /* directory */
+        HRSRC ri = FindResourceW(m, MAKEINTRESOURCEW(ge[k].id), (LPCWSTR)RT_ICON);
+        DWORD sz = ri ? SizeofResource(m, ri) : 0;
+        memcpy(&fe, &ge[k], 12);           /* w,h,colors,res,planes,bpp,bytes */
+        fe.bytes = sz;
+        fe.offset = off;
+        off += sz;
+        WriteFile(f, &fe, sizeof fe, &wr, NULL);
+        if (!sz) rc = 14;
+    }
+    for (k = 0; k < gh->count; k++) {      /* images */
+        HRSRC ri = FindResourceW(m, MAKEINTRESOURCEW(ge[k].id), (LPCWSTR)RT_ICON);
+        if (ri) WriteFile(f, LockResource(LoadResource(m, ri)), SizeofResource(m, ri), &wr, NULL);
+    }
+    CloseHandle(f);
+    FreeLibrary(m);
+    if (rc) DeleteFileA(out);
+    return rc;
+}
+
+/* ======================================================================= */
 /* main                                                                    */
 /* ======================================================================= */
 int main(int argc, char **argv)
 {
     const char *dataArg = NULL, *script = NULL;
     int i;
+    /* hanin_host --export-icon <HANIN95.IME> <out.ico>   (run by the installer) */
+    if (argc == 4 && !strcmp(argv[1], "--export-icon"))
+        return export_icon(argv[2], argv[3], 1);
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verbose")) g_verbose = 1;
         else if (!strcmp(argv[i], "--data") && i + 1 < argc) dataArg = argv[++i];

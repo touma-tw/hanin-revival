@@ -8,7 +8,7 @@
 
 Unicode true
 !ifndef VERSION
-  !define VERSION "0.1.0"
+  !define VERSION "0.1.1"
 !endif
 !define APPNAME   "漢音輸入法復原版"
 !define APPKEY    "HaninRevival"
@@ -133,6 +133,16 @@ Section "Install"
     MessageBox MB_ICONSTOP "從 Hanin502.exe 解出檔案失敗(代碼 $0)。安裝已中止。"
     Abort
   ${EndIf}
+
+  ; The input-method icon is copied out of the IME once, here, so that Windows
+  ; (Settings, the rundll32-hosted text-services dialog) never opens HANIN95.IME
+  ; itself -- Defender flags that access as a trojan (false positive).
+  ; Failure is not fatal: the TIP then shows its built-in icon.
+  DetailPrint "匯出輸入法圖示…"
+  Delete "$INSTDIR\payload\hanin.ico"
+  nsExec::ExecToLog '"$INSTDIR\hanin_host.exe" --export-icon "$INSTDIR\payload\HANIN95.IME" "$INSTDIR\payload\hanin.ico"'
+  Pop $0
+  DetailPrint "  結果:$0"
 
   DetailPrint "註冊輸入法…"
   ExecWait '"$WINDIR\Sysnative\regsvr32.exe" /s "$INSTDIR\HaninTip64.dll"' $0
