@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# NEVER COMMIT ANYTHING FROM PANASONIC (漢音 5.02): the engine, dictionaries,
+# toolbox, disassembly, extracted artwork. Users supply their own Hanin502.exe.
+# ---------------------------------------------------------------------------
+Hanin502.exe
+*.IME
+*.ime
+*.DIC
+*.dic
+*.KBD
+*.HAN
+whanin.ini*
+Tools95.exe
+QUERY.exe
+payload/
+dist/
+*_disasm.txt
+tip/hanin1.ico
+tip/hanin2.ico
+tip/icon*_orig.ico
+tip/icon*_preview.png
+
+# build outputs
+*.exe
+*.dll
+*.obj
+*.pdb
+*.ilk
+*.lib
+*.exp
+*.res
+tip/obj/
+tip/dev/
+installer/bin/
+release/
+
+# test artefacts / screenshots / logs
+test/snaps/
+test/*.out
+test/*.txt
+tools/*.png
+*_preview.png
+*.log
+probe.cmd
+probe.txt
+
+# superseded PowerShell-based dev installer (replaced by installer/HaninRevival.nsi)
+install/
