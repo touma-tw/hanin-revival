@@ -577,6 +577,8 @@ static void fatal_restart(const char *why)
         char _b[128]; _snprintf(_b, 128, "exception 0x%08x in %s", GetExceptionCode(), what); \
         out = failval; fatal_restart(_b); }
 
+static void usrdic_init(void);
+
 static BOOL engine_init(void)
 {
     char path[MAX_PATH];
@@ -644,6 +646,7 @@ static BOOL engine_init(void)
         SendMessageA(g_hwndUI, WM_IME_SETCONTEXT, TRUE, ISC_SHOWUIALL);
     }
     pump();
+    usrdic_init();
     logf("engine ready (conv=0x%x)", g_imc->ic.fdwConversion);
     return TRUE;
 }
@@ -886,6 +889,45 @@ static BOOL is_dead_hotkey(const HANIN_REQ *q)
     return FALSE;
 }
 
+/* ----------------------------------------------------------------------- */
+/* User dictionary ($USR000.DIC) persistence                                */
+/* ----------------------------------------------------------------------- */
+/* Learned words and words added with 線上新詞登錄 (move the cursor into the
+ * composition, Shift+Enter: registers cursor..end, 2-5 characters) only go to
+ * an in-memory table; the engine marks it dirty (word @ RVA 0x2479A, a second
+ * flag @ 0x247AC) and writes it back in an internal routine (RVA 0x4EA0, no
+ * arguments) that the original IMM32 path ran on UI events this host never
+ * sends. Without this, everything learned was lost whenever the host
+ * restarted (logoff, crash recovery, toolbox exit). The routine is only used
+ * after checking it is the expected code (Hanin 5.02, SHA-verified at install):
+ * 66 83 3D <&dirty>  =  cmp word ptr [dirty], 0 */
+#define RVA_USRDIC_SAVE   0x4EA0
+#define RVA_USRDIC_DIRTY  0x2479A
+#define RVA_USRDIC_DIRTY2 0x247AC
+typedef short (__cdecl *PFN_USRDIC_SAVE)(void);
+static PFN_USRDIC_SAVE g_usrdicSave;
+
+static void usrdic_init(void)
+{
+    BYTE *p = (BYTE *)g_ime + RVA_USRDIC_SAVE;
+    if (p[0] == 0x66 && p[1] == 0x83 && p[2] == 0x3D && p[7] == 0 &&
+        *(DWORD *)(p + 3) == (DWORD)((BYTE *)g_ime + RVA_USRDIC_DIRTY))
+        g_usrdicSave = (PFN_USRDIC_SAVE)p;
+    else
+        logf("WARNING: unexpected engine build; user dictionary is not saved by the host");
+}
+
+static void usrdic_save(void)
+{
+    short rc;
+    if (!g_usrdicSave) return;
+    if (!*(volatile WORD *)((BYTE *)g_ime + RVA_USRDIC_DIRTY) &&
+        !*(volatile WORD *)((BYTE *)g_ime + RVA_USRDIC_DIRTY2)) return;
+    SEH_CALL(g_usrdicSave(), "user dictionary save", -1, rc);
+    if (rc) logf("!! user dictionary save failed (%d)", rc);
+    else logv("user dictionary saved");
+}
+
 static void engine_process(const HANIN_REQ *q, HANIN_RESP *r)
 {
     BOOL up = (q->flags & HREQ_UP) != 0;
@@ -987,6 +1029,7 @@ static void engine_process(const HANIN_REQ *q, HANIN_RESP *r)
         logv("  -> result='%s' comp='%s' cur=%u cand=%d", w8(r->result), w8(r->comp), r->compCursor, r->candOpen);
         if (r->candOpen) logv("  cand: %s", w8(r->cand));
     }
+    if (q->cmd != HCMD_TEST && q->cmd != HCMD_PING) usrdic_save();
     InterlockedExchange(&g_busy, 0);
 }
 
@@ -1183,6 +1226,21 @@ static void test_key(UINT vk, BOOL shift, char ch)
     if (g_tr.result[0]) printf("  COMMIT(up) '%s'\n", w8(g_tr.result));
 }
 
+/* {S+ENTER} / {S+DEL}: the real key order -- Shift down, key down/up with Shift
+ * held, Shift up -- as the TIP forwards it (Shift down/up included). */
+static void test_shift_combo(UINT vk, char ch)
+{
+    test_req(HCMD_TEST, VK_SHIFT, FALSE, TRUE);
+    printf("  shift down eaten=%d\n", g_tr.eaten);
+    if (g_tr.eaten) test_req(HCMD_KEY, VK_SHIFT, FALSE, TRUE);
+    test_key(vk, TRUE, ch);
+    test_req(HCMD_TEST, VK_SHIFT, TRUE, FALSE);
+    printf("  shift up eaten=%d\n", g_tr.eaten);
+    if (g_tr.eaten) test_req(HCMD_KEY, VK_SHIFT, TRUE, FALSE);
+    printf("[s] method=%d comp='%s' cur=%u%s\n", (int)g_tr.method, w8(g_tr.comp), g_tr.compCursor, g_tr.candOpen ? " +CAND" : "");
+    if (g_tr.result[0]) printf("  COMMIT(shift up) '%s'\n", w8(g_tr.result));
+}
+
 static BYTE *g_memSnap; static DWORD g_memVa, g_memSize;
 static void mem_section(void)
 {
@@ -1235,6 +1293,8 @@ static void run_script(const char *s)
                 g_testCtrl = 0;
             }
             else if (!_stricmp(tok, "S-ENTER")) test_key(VK_RETURN, TRUE, 'R');
+            else if (!_stricmp(tok, "S+ENTER")) test_shift_combo(VK_RETURN, 'R');
+            else if (!_stricmp(tok, "S+DEL")) test_shift_combo(VK_DELETE, 'D');
             else if (!_stricmp(tok, "S-DEL")) test_key(VK_DELETE, TRUE, 'D');
             else if (!_stricmp(tok, "TAB")) test_key(VK_TAB, FALSE, 'T');
             else if (!_stricmp(tok, "MEMSNAP")) mem_snap();
